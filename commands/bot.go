@@ -48,6 +48,7 @@ func RegistrFeishuBot(app *cli.MultipleProgram) {
 		},
 		Action: func(ctx *cli.Context) (err error) {
 			return feishu.ServeFeishuBot(&feishu.FeishuBotConfig{
+				Port:              ctx.Int64("port"),
 				ChatGPTAPIKey:     ctx.String("chatgpt-api-key"),
 				AppID:             ctx.String("app-id"),
 				AppSecret:         ctx.String("app-secret"),
