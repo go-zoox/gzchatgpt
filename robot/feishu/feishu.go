@@ -99,6 +99,12 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 									}
 
 									logger.Infof("robot response: %v", resp)
+
+									//	Invalid access token for authorization. Please make a request with token attached
+									// update the access token
+									if resp.Code != 99991663 {
+										_, _ = bot.GetTenantAccessTokenInternal(true)
+									}
 								}()
 
 								return nil
