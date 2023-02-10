@@ -42,6 +42,28 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 		return fmt.Errorf("failed to get bot info: %v", err)
 	}
 
+	reply := func(chatID, answer string) {
+		msg := lark.NewMsgBuffer(lark.MsgPost)
+		postContent := lark.NewPostBuilder().
+			// Title("asdaads").
+			TextTag(answer, 1, true).
+			Render()
+		om := msg.BindOpenChatID(chatID).Post(postContent).Build()
+		resp, err := bot.PostMessage(om)
+		if err != nil {
+			logger.Errorf("failed to post message: %v", err)
+			return
+		}
+
+		logger.Infof("robot response: %v", resp)
+
+		//	Invalid access token for authorization. Please make a request with token attached
+		// update the access token
+		if resp.Code != 99991663 {
+			_, _ = bot.GetTenantAccessTokenInternal(true)
+		}
+	}
+
 	fmt.PrintJSON(map[string]interface{}{
 		"cfg": cfg,
 		"bot": botInfo.Bot,
@@ -74,6 +96,8 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 							if *metion.Key == "@_user_1" && *metion.Id.OpenId == botInfo.Bot.OpenID {
 								go func() {
 									logger.Infof("问题：%s", question)
+									reply(*event.Event.Message.ChatId, "我想想 ...")
+
 									var err error
 									var response *gpt3.CompletionResponse
 									err = retry.Retry(func() error {
@@ -99,26 +123,7 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 									answer := strings.TrimSpace(response.Choices[0].Text)
 									logger.Infof("回答：%s", answer)
 
-									//
-									msg := lark.NewMsgBuffer(lark.MsgPost)
-									postContent := lark.NewPostBuilder().
-										// Title("asdaads").
-										TextTag(answer, 1, true).
-										Render()
-									om := msg.BindOpenChatID(*event.Event.Message.ChatId).Post(postContent).Build()
-									resp, err := bot.PostMessage(om)
-									if err != nil {
-										logger.Errorf("failed to post message: %v", err)
-										return
-									}
-
-									logger.Infof("robot response: %v", resp)
-
-									//	Invalid access token for authorization. Please make a request with token attached
-									// update the access token
-									if resp.Code != 99991663 {
-										_, _ = bot.GetTenantAccessTokenInternal(true)
-									}
+									reply(*event.Event.Message.ChatId, answer)
 								}()
 
 								return nil
