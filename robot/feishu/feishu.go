@@ -123,7 +123,7 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 									answer := strings.TrimSpace(response.Choices[0].Text)
 									logger.Infof("回答：%s", answer)
 
-									reply(*event.Event.Message.ChatId, answer)
+									reply(*event.Event.Message.ChatId, fmt.Sprintf("%s\n-------------\n%s", question, answer))
 								}()
 
 								return nil
