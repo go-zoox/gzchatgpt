@@ -3,9 +3,10 @@ package feishu
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
+
+	"github.com/go-zoox/core-utils/fmt"
 
 	"github.com/PullRequestInc/go-gpt3"
 	"github.com/go-lark/lark"
@@ -36,6 +37,15 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 	client := gpt3.NewClient(cfg.ChatGPTAPIKey)
 	bot := lark.NewChatBot(cfg.AppID, cfg.AppSecret)
 	_, _ = bot.GetTenantAccessTokenInternal(true)
+	botInfo, err := bot.GetBotInfo()
+	if err != nil {
+		return fmt.Errorf("failed to get bot info: %v", err)
+	}
+
+	fmt.PrintJSON(map[string]interface{}{
+		"cfg": cfg,
+		"bot": bot,
+	})
 
 	// 注册消息处理器
 	handler := dispatcher.NewEventDispatcher(cfg.VerificationToken, cfg.EncryptKey).
@@ -61,7 +71,7 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 						question := textMessage[len("@_user_1 "):]
 						fmt.Println("question:", question)
 						for _, metion := range event.Event.Message.Mentions {
-							if *metion.Key == "@_user_1" && *metion.Name == "ChatGPT" {
+							if *metion.Key == "@_user_1" && *metion.Id.OpenId == botInfo.Bot.OpenID {
 								go func() {
 									logger.Infof("问题：%s", question)
 									var err error
