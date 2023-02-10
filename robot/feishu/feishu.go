@@ -59,7 +59,7 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 
 		//	Invalid access token for authorization. Please make a request with token attached
 		// update the access token
-		if resp.Code != 99991663 {
+		if resp.Code == 99991663 {
 			_, _ = bot.GetTenantAccessTokenInternal(true)
 		}
 	}
