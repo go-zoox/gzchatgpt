@@ -76,7 +76,7 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 										}
 
 										return nil
-									}, 3, time.Second)
+									}, 5, 3*time.Second)
 
 									answer := strings.TrimSpace(response.Choices[0].Text)
 									logger.Infof("回答：%s", answer)
