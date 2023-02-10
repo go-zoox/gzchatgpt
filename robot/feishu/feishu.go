@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -13,6 +12,8 @@ import (
 	"github.com/go-zoox/core-utils/regexp"
 	"github.com/go-zoox/logger"
 	"github.com/go-zoox/retry"
+	"github.com/go-zoox/zoox"
+	"github.com/go-zoox/zoox/defaults"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/core/httpserverext"
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
@@ -21,6 +22,7 @@ import (
 )
 
 type FeishuBotConfig struct {
+	Port              int64
 	ChatGPTAPIKey     string
 	AppID             string
 	AppSecret         string
@@ -29,6 +31,8 @@ type FeishuBotConfig struct {
 }
 
 func ServeFeishuBot(cfg *FeishuBotConfig) error {
+	app := defaults.Application()
+
 	client := gpt3.NewClient(cfg.ChatGPTAPIKey)
 	bot := lark.NewChatBot(cfg.AppID, cfg.AppSecret)
 	_, _ = bot.GetTenantAccessTokenInternal(true)
@@ -125,8 +129,15 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 
 	// 注册 http 路由
 	// http.HandleFunc("/webhook/event", httpserverext.NewEventHandlerFunc(handler, larkevent.WithLogLevel(larkcore.LogLevelDebug)))
-	http.HandleFunc("/bot/feishu", httpserverext.NewEventHandlerFunc(handler, larkevent.WithLogLevel(larkcore.LogLevelDebug)))
+	// http.HandleFunc("/bot/feishu", httpserverext.NewEventHandlerFunc(handler, larkevent.WithLogLevel(larkcore.LogLevelDebug)))
+	app.Post("/bot/feishu", func(ctx *zoox.Context) {
+		httpserverext.NewEventHandlerFunc(handler, larkevent.WithLogLevel(larkcore.LogLevelDebug))(
+			ctx.Writer,
+			ctx.Request,
+		)
+	})
 
 	// 启动 http 服务
-	return http.ListenAndServe(":8080", nil)
+	// return http.ListenAndServe(":8080", nil)
+	return app.Run(fmt.Sprintf(":%d", cfg.Port))
 }

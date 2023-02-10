@@ -10,6 +10,13 @@ func RegistrFeishuBot(app *cli.MultipleProgram) {
 		Name:  "feishu-bot",
 		Usage: "feishu bot",
 		Flags: []cli.Flag{
+			&cli.IntFlag{
+				Name:    "port",
+				Usage:   "server port",
+				Aliases: []string{"p"},
+				EnvVars: []string{"PORT"},
+				Value:   8080,
+			},
 			&cli.StringFlag{
 				Name:     "chatgpt-api-key",
 				Usage:    "ChatGPT API Key",
