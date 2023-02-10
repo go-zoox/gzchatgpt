@@ -44,7 +44,7 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 
 	fmt.PrintJSON(map[string]interface{}{
 		"cfg": cfg,
-		"bot": bot,
+		"bot": botInfo.Bot,
 	})
 
 	// 注册消息处理器
