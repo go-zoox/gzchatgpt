@@ -42,7 +42,7 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 		return fmt.Errorf("failed to get bot info: %v", err)
 	}
 
-	reply := func(chatID, answer string) {
+	reply := func(chatID, answer string) error {
 		msg := lark.NewMsgBuffer(lark.MsgPost)
 		postContent := lark.NewPostBuilder().
 			// Title("asdaads").
@@ -52,7 +52,7 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 		resp, err := bot.PostMessage(om)
 		if err != nil {
 			logger.Errorf("failed to post message: %v", err)
-			return
+			return fmt.Errorf("failed to request when reply: %v", err)
 		}
 
 		logger.Infof("robot response: %v", resp)
@@ -61,7 +61,10 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 		// update the access token
 		if resp.Code == 99991663 {
 			_, _ = bot.GetTenantAccessTokenInternal(true)
+			return fmt.Errorf("failed to reply: %s", resp.Msg)
 		}
+
+		return nil
 	}
 
 	fmt.PrintJSON(map[string]interface{}{
@@ -95,12 +98,15 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 						for _, metion := range event.Event.Message.Mentions {
 							if *metion.Key == "@_user_1" && *metion.Id.OpenId == botInfo.Bot.OpenID {
 								go func() {
-									logger.Infof("问题：%s", question)
-									reply(*event.Event.Message.ChatId, "我想想 ...")
 
 									var err error
 									var response *gpt3.CompletionResponse
 									err = retry.Retry(func() error {
+										logger.Infof("问题：%s", question)
+										if err := reply(*event.Event.Message.ChatId, "我想想 ..."); err != nil {
+											return err
+										}
+
 										response, err = client.CompletionWithEngine(context.Background(), gpt3.TextDavinci003Engine, gpt3.CompletionRequest{
 											Prompt: []string{
 												question,
@@ -113,17 +119,19 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 											return fmt.Errorf("failed to request answer: %v", err)
 										}
 
+										answer := strings.TrimSpace(response.Choices[0].Text)
+										logger.Infof("回答：%s", answer)
+
+										reply(*event.Event.Message.ChatId, fmt.Sprintf("%s\n-------------\n%s", question, answer))
+
 										return nil
 									}, 5, 3*time.Second)
 									if err != nil {
 										logger.Errorf("failed to get answer: %v", err)
+										reply(*event.Event.Message.ChatId, "ChatGPT 繁忙，请稍后重试")
 										return
 									}
 
-									answer := strings.TrimSpace(response.Choices[0].Text)
-									logger.Infof("回答：%s", answer)
-
-									reply(*event.Event.Message.ChatId, fmt.Sprintf("%s\n-------------\n%s", question, answer))
 								}()
 
 								return nil
