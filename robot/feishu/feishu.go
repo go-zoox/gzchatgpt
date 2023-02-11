@@ -49,22 +49,25 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 			TextTag(answer, 1, true).
 			Render()
 		om := msg.BindOpenChatID(chatID).Post(postContent).Build()
-		resp, err := bot.PostMessage(om)
-		if err != nil {
-			logger.Errorf("failed to post message: %v", err)
-			return fmt.Errorf("failed to request when reply: %v", err)
-		}
 
-		logger.Infof("robot response: %v", resp)
+		return retry.Retry(func() error {
+			resp, err := bot.PostMessage(om)
+			if err != nil {
+				logger.Errorf("failed to post message: %v", err)
+				return fmt.Errorf("failed to request when reply: %v", err)
+			}
 
-		//	Invalid access token for authorization. Please make a request with token attached
-		// update the access token
-		if resp.Code == 99991663 {
-			_, _ = bot.GetTenantAccessTokenInternal(true)
-			return fmt.Errorf("failed to reply: %s", resp.Msg)
-		}
+			logger.Infof("robot response: %v", resp)
 
-		return nil
+			//	Invalid access token for authorization. Please make a request with token attached
+			// update the access token
+			if resp.Code == 99991663 {
+				_, _ = bot.GetTenantAccessTokenInternal(true)
+				return fmt.Errorf("failed to reply: %s", resp.Msg)
+			}
+
+			return nil
+		}, 3, 3*time.Second)
 	}
 
 	fmt.PrintJSON(map[string]interface{}{
@@ -98,15 +101,15 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 						for _, metion := range event.Event.Message.Mentions {
 							if *metion.Key == "@_user_1" && *metion.Id.OpenId == botInfo.Bot.OpenID {
 								go func() {
+									logger.Infof("问题：%s", question)
+									if err := reply(*event.Event.Message.ChatId, "我想想 ..."); err != nil {
+										return
+									}
 
 									var err error
+									var answer string
 									var response *gpt3.CompletionResponse
 									err = retry.Retry(func() error {
-										logger.Infof("问题：%s", question)
-										if err := reply(*event.Event.Message.ChatId, "我想想 ..."); err != nil {
-											return err
-										}
-
 										response, err = client.CompletionWithEngine(context.Background(), gpt3.TextDavinci003Engine, gpt3.CompletionRequest{
 											Prompt: []string{
 												question,
@@ -119,19 +122,23 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 											return fmt.Errorf("failed to request answer: %v", err)
 										}
 
-										answer := strings.TrimSpace(response.Choices[0].Text)
-										logger.Infof("回答：%s", answer)
-
-										reply(*event.Event.Message.ChatId, fmt.Sprintf("%s\n-------------\n%s", question, answer))
+										answer = strings.TrimSpace(response.Choices[0].Text)
 
 										return nil
 									}, 5, 3*time.Second)
 									if err != nil {
 										logger.Errorf("failed to get answer: %v", err)
-										reply(*event.Event.Message.ChatId, "ChatGPT 繁忙，请稍后重试")
+										if err := reply(*event.Event.Message.ChatId, "ChatGPT 繁忙，请稍后重试"); err != nil {
+											return
+										}
 										return
 									}
 
+									logger.Infof("回答：%s", answer)
+
+									if err := reply(*event.Event.Message.ChatId, fmt.Sprintf("%s\n-------------\n%s", question, answer)); err != nil {
+										return
+									}
 								}()
 
 								return nil
