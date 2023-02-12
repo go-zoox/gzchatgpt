@@ -3,6 +3,7 @@ package feishu
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 	"time"
 
@@ -34,7 +35,9 @@ type FeishuBotConfig struct {
 func ServeFeishuBot(cfg *FeishuBotConfig) error {
 	app := defaults.Application()
 
-	client := gpt3.NewClient(cfg.ChatGPTAPIKey)
+	client := gpt3.NewClient(cfg.ChatGPTAPIKey, gpt3.WithHTTPClient(&http.Client{
+		Timeout: time.Duration(600 * time.Second),
+	}))
 	bot := lark.NewChatBot(cfg.AppID, cfg.AppSecret)
 	_, _ = bot.GetTenantAccessTokenInternal(true)
 	botInfo, err := bot.GetBotInfo()
@@ -93,58 +96,80 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 				}
 
 				textMessage := content.Text
-				if textMessage != "" {
-					fmt.Println("textMessage:", textMessage)
+				if textMessage == "" {
+					return nil
+				}
+
+				fmt.Println("textMessage:", textMessage)
+
+				chatID := *event.Event.Message.ChatId
+				var question string
+
+				// group chat
+				if *event.Event.Message.ChatType == "group" {
+					// @
 					if ok := regexp.Match("^@_user_1", textMessage); ok {
-						question := textMessage[len("@_user_1 "):]
-						fmt.Println("question:", question)
 						for _, metion := range event.Event.Message.Mentions {
 							if *metion.Key == "@_user_1" && *metion.Id.OpenId == botInfo.Bot.OpenID {
-								go func() {
-									logger.Infof("问题：%s", question)
-									if err := reply(*event.Event.Message.ChatId, "我想想 ..."); err != nil {
-										return
-									}
-
-									var err error
-									var answer string
-									var response *gpt3.CompletionResponse
-									err = retry.Retry(func() error {
-										response, err = client.CompletionWithEngine(context.Background(), gpt3.TextDavinci003Engine, gpt3.CompletionRequest{
-											Prompt: []string{
-												question,
-											},
-											MaxTokens:   gpt3.IntPtr(3000),
-											Temperature: gpt3.Float32Ptr(0),
-										})
-										if err != nil {
-											logger.Errorf("failed to request answer: %v", err)
-											return fmt.Errorf("failed to request answer: %v", err)
-										}
-
-										answer = strings.TrimSpace(response.Choices[0].Text)
-
-										return nil
-									}, 5, 3*time.Second)
-									if err != nil {
-										logger.Errorf("failed to get answer: %v", err)
-										if err := reply(*event.Event.Message.ChatId, "ChatGPT 繁忙，请稍后重试"); err != nil {
-											return
-										}
-										return
-									}
-
-									logger.Infof("回答：%s", answer)
-
-									if err := reply(*event.Event.Message.ChatId, fmt.Sprintf("%s\n-------------\n%s", question, answer)); err != nil {
-										return
-									}
-								}()
-
-								return nil
+								question = textMessage[len("@_user_1 "):]
+								break
 							}
 						}
+					} else if ok := regexp.Match("^/chatgpt\\s+", textMessage); ok {
+						// command: /chatgpt
+						question = textMessage[len("/chatgpt "):]
 					}
+				} else if *event.Event.Message.ChatType == "p2p" {
+					question = textMessage
+				}
+
+				if question != "" {
+					fmt.Println("question:", question)
+
+					go func() {
+						logger.Infof("问题：%s", question)
+						// if err := reply(chatID, "我想想 ..."); err != nil {
+						// 	return
+						// }
+
+						var err error
+						var answer string
+						var response *gpt3.CompletionResponse
+						err = retry.Retry(func() error {
+							response, err = client.CompletionWithEngine(context.Background(), gpt3.TextDavinci003Engine, gpt3.CompletionRequest{
+								Prompt: []string{
+									question,
+								},
+								MaxTokens:   gpt3.IntPtr(3000),
+								Temperature: gpt3.Float32Ptr(0),
+							})
+							if err != nil {
+								logger.Errorf("failed to request answer: %v", err)
+								return fmt.Errorf("failed to request answer: %v", err)
+							}
+
+							answer = strings.TrimSpace(response.Choices[0].Text)
+
+							return nil
+						}, 5, 3*time.Second)
+						if err != nil {
+							logger.Errorf("failed to get answer: %v", err)
+							if err := reply(chatID, "ChatGPT 繁忙，请稍后重试"); err != nil {
+								return
+							}
+							return
+						}
+
+						logger.Infof("回答：%s", answer)
+						responseMessage := answer
+						if *event.Event.Message.ChatType == "group" {
+							responseMessage = fmt.Sprintf("%s\n-------------\n%s", question, answer)
+						}
+
+						if err := reply(chatID, responseMessage); err != nil {
+							return
+						}
+					}()
 				}
 			}
 
