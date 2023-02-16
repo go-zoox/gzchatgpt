@@ -30,6 +30,8 @@ type FeishuBotConfig struct {
 	AppSecret         string
 	EncryptKey        string
 	VerificationToken string
+	//
+	AsChallenge bool
 }
 
 func ServeFeishuBot(cfg *FeishuBotConfig) error {
@@ -186,6 +188,27 @@ func ServeFeishuBot(cfg *FeishuBotConfig) error {
 	// http.HandleFunc("/webhook/event", httpserverext.NewEventHandlerFunc(handler, larkevent.WithLogLevel(larkcore.LogLevelDebug)))
 	// http.HandleFunc("/bot/feishu", httpserverext.NewEventHandlerFunc(handler, larkevent.WithLogLevel(larkcore.LogLevelDebug)))
 	app.Post("/bot/feishu", func(ctx *zoox.Context) {
+		if cfg.AsChallenge {
+			type Challenge struct {
+				Challenge string `json:"challenge"`
+			}
+			var c Challenge
+			if err := ctx.BindJSON(&c); err != nil {
+				ctx.Fail(err, 400000, "invalid challenge data")
+				return
+			}
+
+			if c.Challenge == "" {
+				ctx.Fail(fmt.Errorf("expect challenge, but got empty"), 400000, "expect challenge, but got empty")
+				return
+			}
+
+			ctx.JSON(http.StatusOK, zoox.H{
+				"challenge": c.Challenge,
+			})
+			return
+		}
+
 		httpserverext.NewEventHandlerFunc(handler, larkevent.WithLogLevel(larkcore.LogLevelDebug))(
 			ctx.Writer,
 			ctx.Request,

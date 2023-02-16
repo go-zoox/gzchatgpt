@@ -45,6 +45,11 @@ func RegistrFeishuBot(app *cli.MultipleProgram) {
 				Usage:   "enable token verification if you need",
 				EnvVars: []string{"VERIFICATION_TOKEN"},
 			},
+			&cli.BoolFlag{
+				Name:    "challenge",
+				Usage:   "server as challenge",
+				EnvVars: []string{"CHALLENGE"},
+			},
 		},
 		Action: func(ctx *cli.Context) (err error) {
 			return feishu.ServeFeishuBot(&feishu.FeishuBotConfig{
@@ -54,6 +59,7 @@ func RegistrFeishuBot(app *cli.MultipleProgram) {
 				AppSecret:         ctx.String("app-secret"),
 				EncryptKey:        ctx.String("encrypt-key"),
 				VerificationToken: ctx.String("verification-token"),
+				AsChallenge:       ctx.Bool("challenge"),
 			})
 		},
 	})
